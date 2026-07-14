@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Sleek financial Profit & Loss (P&L) statement generator running entirely client-side. Upload your bank statement CSV to automatically generate local tax adjustments and interactive reports.">
+  <title>Profit & Loss Statement Generator | Antigravity Finance</title>
+  
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <!-- Custom Stylesheet (Design System Tokens) -->
+  <link rel="stylesheet" href="styles.css?v=2.0">
+</head>
+<body>
+  
+  <div class="app-container">
+    
+    <!-- HEADER NAVBAR -->
+    <header class="navbar">
+      <div class="brand">
+        <div class="brand-logo"><i class="fa-solid fa-chart-line"></i></div>
+        <span class="type-h3" style="font-weight: var(--weight-bold); letter-spacing: -0.02em;">Antigravity <span style="color: var(--primary-background-default);">Finance</span></span>
+      </div>
+      
+      <!-- STEPPER WIZARD INDICATOR -->
+      <div class="stepper" id="wizard-stepper">
+        <div class="step-item current" id="step-indicator-onboarding">
+          <div class="step-number">1</div>
+          <div class="step-label">Onboarding</div>
+        </div>
+        <div class="step-divider" id="step-divider-upload"></div>
+        
+        <div class="step-item upcoming" id="step-indicator-upload">
+          <div class="step-number">2</div>
+          <div class="step-label">Upload</div>
+        </div>
+        <div class="step-divider" id="step-divider-review"></div>
+        
+        <div class="step-item upcoming" id="step-indicator-review">
+          <div class="step-number">3</div>
+          <div class="step-label">Review & Map</div>
+        </div>
+        <div class="step-divider" id="step-divider-report"></div>
+        
+        <div class="step-item upcoming" id="step-indicator-report">
+          <div class="step-number">4</div>
+          <div class="step-label">P&L Report</div>
+        </div>
+      </div>
+    </header>
+    
+    <!-- MAIN CONTENT VIEWPORT -->
+    <main class="main-content">
+      
+      <!-- STEP 1: ONBOARDING MODAL/FORM -->
+      <section class="wizard-step active" id="step-onboarding">
+        <div class="card" style="max-width: 540px; margin: 0 auto; width: 100%;">
+          <div class="card-header">
+            <h1 class="type-h2">Setup Business Profile</h1>
+            <p class="type-body-sm text-muted">Configure localization settings, tax preferences, and mapping rules to align your statement categories.</p>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label" for="profile-region">Region & Localization</label>
+            <select id="profile-region">
+              <option value="United States">United States (USD - Revenue, Net Income, COGS)</option>
+              <option value="United Kingdom">United Kingdom (GBP - Turnover, Net Profit, Stock/Direct Costs)</option>
+              <option value="Australia">Australia (AUD - Turnover, Net Profit, Stock/Direct Costs)</option>
+              <option value="South Africa" selected>South Africa (ZAR - Turnover, Net Profit, Stock/Direct Costs)</option>
+            </select>
+          </div>
+
+          <div class="form-group" id="profile-vat-container">
+            <label class="checkbox-container">
+              <input type="checkbox" id="profile-vat-extract">
+              <span class="checkbox-custom"></span>
+              Extract local VAT/GST rate automatically from expenses
+            </label>
+            
+            <div id="profile-vat-rate-box" class="d-none mt-4" style="padding-left: var(--space-4); border-left: 2px solid var(--primary-border-default);">
+              <div class="form-group" style="max-width: 140px;">
+                <label class="form-label" for="profile-vat-rate">Tax Rate (%)</label>
+                <div style="position: relative; display: flex; align-items: center;">
+                  <input type="number" id="profile-vat-rate" value="15" min="0" max="100" style="padding-right: var(--space-4);">
+                  <span style="position: absolute; right: var(--space-3); font-size: 14px; font-weight: var(--weight-semibold); color: var(--neutral-text-muted);">%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label" for="profile-industry">Business Industry Type</label>
+            <select id="profile-industry">
+              <option value="SaaS/Tech">SaaS / Technology</option>
+              <option value="Retail/E-commerce">Retail / E-commerce</option>
+              <option value="Hospitality/Brick-and-Mortar">Hospitality / Brick-and-Mortar</option>
+              <option value="Consultancy/Agency">Consultancy / Agency</option>
+            </select>
+            <p class="type-body-sm text-muted">Rules will automatically predict expense mappings (e.g. AWS -> Hosting COGS in SaaS, DHL -> Freight COGS in Retail).</p>
+          </div>
+
+          <div class="button-group right">
+            <button class="btn btn-primary" id="btn-submit-onboarding">
+              Continue to Upload <i class="fa-solid fa-arrow-right"></i>
+            </button>
+          </div>
+        </div>
+      </section>
+      
+      <!-- STEP 2: UPLOAD LANDING STATE -->
+      <section class="wizard-step" id="step-upload">
+        <div class="card" style="max-width: 680px; margin: 0 auto; width: 100%;">
+          <div class="card-header">
+            <h2 class="type-h2">Upload Statement Data</h2>
+            <p class="type-body-sm text-muted">Upload any CSV export from your business bank account. Antigravity normalizes inconsistent structures automatically.</p>
+          </div>
+          
+          <!-- Drop Zone -->
+          <div class="upload-zone" id="drop-zone">
+            <div class="upload-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+            <p class="type-body-lg" style="font-weight: var(--weight-semibold);">Drag & drop your bank CSV here</p>
+            <p class="type-body-sm text-muted">or click to browse local files</p>
+            <input type="file" id="csv-file-input" accept=".csv" class="d-none">
+          </div>
+          
+          <div class="divider-with-text">or view demo instance</div>
+          
+          <!-- Demo Data Action Button -->
+          <div style="text-align: center;">
+            <button class="btn btn-secondary btn-lg" id="btn-use-demo">
+              <i class="fa-solid fa-database"></i> Use Realistic Demo Data
+            </button>
+            <p class="type-body-sm text-muted" style="margin-top: var(--space-2);">Loads real transactions with metadata headers, blank cells, and industry payees.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 2.5: SCHEMA ALIGNMENT PREVIEW -->
+      <section class="wizard-step" id="step-schema">
+        <div class="card">
+          <div class="card-header">
+            <h2 class="type-h2">Confirm Schema Alignment</h2>
+            <p class="type-body-sm text-muted">Our normalization engine automatically scanned your CSV rows and predicted column types. Adjust column headers if needed.</p>
+          </div>
+
+          <!-- Mappers selectors -->
+          <div class="form-row" style="background-color: var(--neutral-surface-default); padding: var(--space-4); border-radius: var(--radius-sm); border: 1px solid var(--neutral-border-default);">
+            <div class="form-group">
+              <label class="form-label" for="schema-date-col"><i class="fa-solid fa-calendar" style="color: var(--primary-background-default);"></i> Date Column</label>
+              <select id="schema-date-col"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="schema-desc-col"><i class="fa-solid fa-font" style="color: var(--secondary-background-default);"></i> Description Column</label>
+              <select id="schema-desc-col"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="schema-amount-col"><i class="fa-solid fa-coins" style="color: var(--success-background-default);"></i> Amount Column</label>
+              <select id="schema-amount-col"></select>
+            </div>
+          </div>
+
+          <!-- Parsed preview table -->
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr id="schema-preview-headers"></tr>
+              </thead>
+              <tbody id="schema-preview-body"></tbody>
+            </table>
+          </div>
+
+          <div class="button-group right">
+            <button class="btn btn-primary btn-lg" id="btn-confirm-schema">
+              Confirm & Parse Dataset <i class="fa-solid fa-check"></i>
+            </button>
+          </div>
+        </div>
+      </section>
+      
+      <!-- STEP 3: REVIEW & DYNAMIC MAPPING -->
+      <section class="wizard-step" id="step-review">
+        <div class="card">
+          <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--space-3);">
+            <div>
+              <h2 class="type-h2">Review & Map Transactions</h2>
+              <p class="type-body-sm text-muted">Verify transactions auto-categorized by our industry heuristic rules. You can override categories or exclude transfers.</p>
+            </div>
+            <button class="btn btn-primary btn-lg" id="btn-generate-pl">
+              Generate P&L Statement <i class="fa-solid fa-chart-pie"></i>
+            </button>
+          </div>
+
+          <!-- Transaction Ingestion Table -->
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 60px; text-align: center;">Exclude</th>
+                  <th style="width: 120px;">Date</th>
+                  <th>Description</th>
+                  <th style="text-align: right; width: 140px;">Raw Cost</th>
+                  <th style="text-align: right; width: 120px;">Extracted Tax</th>
+                  <th style="text-align: right; width: 140px;">Net Cost</th>
+                  <th style="width: 260px;">Category Allocation Override</th>
+                </tr>
+              </thead>
+              <tbody id="review-table-body">
+                <!-- Appends dynamically in JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+      
+      <!-- STEP 4: PROFIT & LOSS STATEMENT DASHBOARD -->
+      <section class="wizard-step" id="step-report">
+        
+        <!-- Quick Control Aggregators bar -->
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--space-3);">
+          <div style="display: flex; align-items: center; gap: var(--space-2);">
+            <span class="type-label text-muted">Time Aggregation:</span>
+            <div class="button-group" style="margin: 0;">
+              <button class="btn" id="agg-monthly">Monthly</button>
+              <button class="btn" id="agg-quarterly">Quarterly</button>
+            </div>
+          </div>
+          
+          <button class="btn btn-secondary" id="btn-export">
+            <i class="fa-solid fa-print"></i> Export / Print Statement
+          </button>
+        </div>
+
+        <!-- Metric Summary Cards -->
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <span class="metric-card-title lbl-revenue">Revenue</span>
+            <span class="metric-card-value" id="metric-rev">$0.00</span>
+            <div class="metric-card-status status-positive">
+              <i class="fa-solid fa-circle-trend-up"></i> Total Inflow
+            </div>
+          </div>
+          <div class="metric-card">
+            <span class="metric-card-title">Gross Margin</span>
+            <span class="metric-card-value" id="metric-gross">$0.00</span>
+            <div class="metric-card-status status-positive">
+              <i class="fa-solid fa-scale-balanced"></i> Post-Direct Costs
+            </div>
+          </div>
+          <div class="metric-card">
+            <span class="metric-card-title">Operating Expenses</span>
+            <span class="metric-card-value" id="metric-opex">$0.00</span>
+            <div class="metric-card-status status-negative" style="color: var(--warning-background-default);">
+              <i class="fa-solid fa-receipt"></i> Overheads
+            </div>
+          </div>
+          <div id="metric-net-container" class="metric-card">
+            <span class="metric-card-title lbl-net-profit">Net Income</span>
+            <span class="metric-card-value" id="metric-net">$0.00</span>
+            <div id="metric-net-status" class="metric-card-status">
+              <!-- Dynamically positive/negative in JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Dashboard Layout Split -->
+        <div class="dashboard-layout">
+          
+          <!-- Left: P&L Statement matrix -->
+          <div class="pl-report">
+            <div class="pl-header">
+              <div>
+                <h3 class="type-h3">Profit & Loss (P&L) Statement</h3>
+                <p class="type-body-sm text-muted">Cash-basis method, net values after tax extraction (if configured).</p>
+              </div>
+              <span class="chip chip-success"><i class="fa-solid fa-wallet"></i> Cash Basis</span>
+            </div>
+            
+            <div class="table-container" style="box-shadow: none; border: none; border-radius: 0;">
+              <table class="data-table">
+                <thead id="matrix-head">
+                  <!-- JS builds -->
+                </thead>
+                <tbody id="matrix-body">
+                  <!-- JS builds -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Right: Visualizations & Charts -->
+          <div class="card" style="gap: var(--space-4); height: fit-content;">
+            <div class="card-header">
+              <h3 class="type-h3">Interactive Analytics</h3>
+            </div>
+            
+            <div class="tabs-container">
+              <button class="tab-btn active" id="tab-trigger-table">Performance Chart</button>
+              <button class="tab-btn" id="tab-trigger-charts">Expenses Breakdown</button>
+            </div>
+
+            <!-- Tab 1: Performance Chart -->
+            <div class="tab-pane active" id="tab-pane-table">
+              <div class="chart-container">
+                <canvas id="performanceChart"></canvas>
+              </div>
+            </div>
+
+            <!-- Tab 2: Expense Breakdown Doughnut -->
+            <div class="tab-pane" id="tab-pane-charts">
+              <div class="chart-container">
+                <canvas id="breakdownChart"></canvas>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+      
+    </main>
+    
+    <!-- FOOTER -->
+    <footer class="footer type-body-sm">
+      <p>&copy; 2026 Antigravity. Built with design tokens for secure client-side cash accounting calculations.</p>
+    </footer>
+    
+  </div>
+
+  <!-- Load Demo datasets first, then App Controllers -->
+  <script src="demo_data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
