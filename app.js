@@ -471,19 +471,33 @@ function compileFinancialReport() {
 
   // Determine unique dates grouping keys
   const groups = new Set();
+  const activeYears = new Set();
   activeTx.forEach(tx => {
     if (!tx.date) return;
     const parts = tx.date.split('-');
-    if (parts.length < 2) return;
+    if (parts.length < 1) return;
     const year = parts[0];
-    const month = parts[1];
+    if (year && year.length === 4) {
+      activeYears.add(year);
+    }
+  });
 
+  // If no years found, default to current year
+  if (activeYears.size === 0) {
+    activeYears.add(new Date().getFullYear().toString());
+  }
+
+  // Generate full calendar months/quarters for active years to ensure columns change
+  const sortedYears = Array.from(activeYears).sort();
+  sortedYears.forEach(year => {
     if (state.timeAggregation === "monthly") {
-      groups.add(`${year}-${month}`);
+      for (let m = 1; m <= 12; m++) {
+        groups.add(`${year}-${String(m).padStart(2, '0')}`);
+      }
     } else {
-      // Quarterly
-      const q = Math.ceil(parseInt(month) / 3);
-      groups.add(`${year}-Q${q}`);
+      for (let q = 1; q <= 4; q++) {
+        groups.add(`${year}-Q${q}`);
+      }
     }
   });
 
