@@ -1318,6 +1318,10 @@ function renderPLMatrixTable(report) {
 }
 
 function renderPLCharts(report) {
+  if (typeof Chart === 'undefined') {
+    console.warn("Chart.js is not loaded. skipping chart rendering.");
+    return;
+  }
   // Destroy existing charts to reload clean data
   if (state.chartInstances.performanceChart) {
     state.chartInstances.performanceChart.destroy();
@@ -1596,23 +1600,33 @@ function setTimeAggregation(mode) {
   const btnQuarterly = document.getElementById("agg-quarterly");
 
   if (mode === "monthly") {
-    btnMonthly.className = "btn btn-secondary";
-    btnMonthly.style.backgroundColor = "var(--primary-background-subtle)";
-    btnMonthly.style.color = "var(--primary-background-default)";
-    btnQuarterly.className = "btn btn-secondary";
-    btnQuarterly.style.backgroundColor = "transparent";
-    btnQuarterly.style.color = "var(--neutral-text-default)";
+    if (btnMonthly) {
+      btnMonthly.className = "btn btn-secondary";
+      btnMonthly.style.backgroundColor = "var(--primary-background-subtle)";
+      btnMonthly.style.color = "var(--primary-background-default)";
+    }
+    if (btnQuarterly) {
+      btnQuarterly.className = "btn btn-secondary";
+      btnQuarterly.style.backgroundColor = "transparent";
+      btnQuarterly.style.color = "var(--neutral-text-default)";
+    }
   } else {
-    btnQuarterly.className = "btn btn-secondary";
-    btnQuarterly.style.backgroundColor = "var(--primary-background-subtle)";
-    btnQuarterly.style.color = "var(--primary-background-default)";
-    btnMonthly.className = "btn btn-secondary";
-    btnMonthly.style.backgroundColor = "transparent";
-    btnMonthly.style.color = "var(--neutral-text-default)";
+    if (btnQuarterly) {
+      btnQuarterly.className = "btn btn-secondary";
+      btnQuarterly.style.backgroundColor = "var(--primary-background-subtle)";
+      btnQuarterly.style.color = "var(--primary-background-default)";
+    }
+    if (btnMonthly) {
+      btnMonthly.className = "btn btn-secondary";
+      btnMonthly.style.backgroundColor = "transparent";
+      btnMonthly.style.color = "var(--neutral-text-default)";
+    }
   }
 
-  // Regenerate P&L Matrix and Charts
-  generatePLStatement();
+  // Only regenerate P&L statement if transactions are loaded
+  if (state.transactions && state.transactions.length > 0) {
+    generatePLStatement();
+  }
 }
 
 // Toggle dashboard tab (table vs charts)
