@@ -1115,3 +1115,44 @@ table.data-table tr.excluded-row {
 .dot-warning { background-color: var(--warning-background-default); }
 .dot-info { background-color: var(--info-background-default); }
 .dot-neutral { background-color: var(--neutral-border-default); }
+
+/* ==========================================
+   RESPONSIVENESS MEDIA OVERRIDES
+   ========================================== */
+@media (max-width: 860px) {
+  header.navbar {
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    text-align: center;
+  }
+}
+
+@media (max-width: 600px) {
+  .step-label {
+    display: none;
+  }
+  .stepper {
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+  }
+  .step-divider {
+    min-width: 15px;
+    max-width: 50px;
+  }
+  
+  h1, .type-h1 { font-size: 24px !important; }
+  h2, .type-h2 { font-size: 20px !important; }
+  h3, .type-h3 { font-size: 18px !important; }
+  h4, .type-h4 { font-size: 16px !important; }
+}
+
+@media (max-width: 480px) {
+  .main-content {
+    padding: var(--space-3) var(--space-3);
+    gap: var(--space-3);
+  }
+  .card {
+    padding: var(--space-3);
+  }
+}
