@@ -475,37 +475,60 @@ function compileFinancialReport() {
   // Filter active transactions
   const activeTx = state.transactions.filter(tx => !tx.isExcluded);
 
-  // Determine unique dates grouping keys
-  const groups = new Set();
-  const activeYears = new Set();
+  // Determine min and max year/month range from active transactions
+  let minYr = 9999, minMon = 12;
+  let maxYr = 0, maxMon = 1;
+  let hasValidDates = false;
+
   activeTx.forEach(tx => {
     if (!tx.date) return;
     const parts = tx.date.split('-');
-    if (parts.length < 1) return;
-    const year = parts[0];
-    if (year && year.length === 4) {
-      activeYears.add(year);
+    if (parts.length >= 2) {
+      const yr = parseInt(parts[0]);
+      const mon = parseInt(parts[1]);
+      if (yr && mon >= 1 && mon <= 12) {
+        hasValidDates = true;
+        if (yr < minYr || (yr === minYr && mon < minMon)) {
+          minYr = yr;
+          minMon = mon;
+        }
+        if (yr > maxYr || (yr === maxYr && mon > maxMon)) {
+          maxYr = yr;
+          maxMon = mon;
+        }
+      }
     }
   });
 
-  // If no years found, default to current year
-  if (activeYears.size === 0) {
-    activeYears.add(new Date().getFullYear().toString());
+  // If no valid dates found, default to current month
+  if (!hasValidDates) {
+    const d = new Date();
+    minYr = d.getFullYear();
+    minMon = d.getMonth() + 1;
+    maxYr = minYr;
+    maxMon = minMon;
   }
 
-  // Generate full calendar months/quarters for active years to ensure columns change
-  const sortedYears = Array.from(activeYears).sort();
-  sortedYears.forEach(year => {
+  // Generate continuous timeline from min to max
+  const groups = new Set();
+  let currYr = minYr;
+  let currMon = minMon;
+
+  while (currYr < maxYr || (currYr === maxYr && currMon <= maxMon)) {
     if (state.timeAggregation === "monthly") {
-      for (let m = 1; m <= 12; m++) {
-        groups.add(`${year}-${String(m).padStart(2, '0')}`);
-      }
+      groups.add(`${currYr}-${String(currMon).padStart(2, '0')}`);
     } else {
-      for (let q = 1; q <= 4; q++) {
-        groups.add(`${year}-Q${q}`);
-      }
+      const q = Math.ceil(currMon / 3);
+      groups.add(`${currYr}-Q${q}`);
     }
-  });
+
+    // Advance 1 month
+    currMon++;
+    if (currMon > 12) {
+      currMon = 1;
+      currYr++;
+    }
+  }
 
   // Sort groups chronologically
   const sortedKeys = Array.from(groups).sort();
