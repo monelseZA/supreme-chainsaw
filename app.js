@@ -853,7 +853,7 @@ function renderReviewTable() {
     // Zero-Rated / Exempt (for Income only)
     const tdZeroRated = document.createElement("td");
     tdZeroRated.className = "text-center";
-    if (amountVal > 0) {
+    if (tx.amount > 0) {
       const labelZr = document.createElement("label");
       labelZr.className = "checkbox-container";
       labelZr.style.margin = "0 auto";
