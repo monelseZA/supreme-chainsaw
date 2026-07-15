@@ -4,7 +4,7 @@ const state = {
     region: "South Africa",
     industry: "SaaS/Tech",
     vatRate: 15,
-    vatExtract: false
+    vatRegistered: "yes"
   },
   csvData: {
     fileName: "",
@@ -416,7 +416,7 @@ function ingestTransactions() {
   const region = state.onboarding.region;
   const industry = state.onboarding.industry;
   const vatRate = state.onboarding.vatRate;
-  const extractTax = state.onboarding.vatExtract;
+  const vatRegistered = state.onboarding.vatRegistered === "yes";
 
   const result = [];
 
@@ -431,15 +431,20 @@ function ingestTransactions() {
     const category = getAutomaticCategory(rawDesc, amountVal, industry);
     const isExcluded = category === "Internal Transfer";
 
-    // Tax processing
-    // If extracting tax, check if amount is negative and row is not excluded
     let taxAmount = 0;
     let netAmount = amountVal;
+    let isZeroRated = false;
 
-    if (extractTax && amountVal < 0 && !isExcluded) {
-      const rateFactor = vatRate / 100;
-      netAmount = amountVal / (1 + rateFactor);
-      taxAmount = amountVal - netAmount; // (will be negative)
+    if (vatRegistered && !isExcluded) {
+      if (amountVal < 0) {
+        const rateFactor = vatRate / 100;
+        netAmount = amountVal / (1 + rateFactor);
+        taxAmount = amountVal - netAmount; // (negative tax)
+      } else if (amountVal > 0) {
+        const rateFactor = vatRate / 100;
+        netAmount = amountVal / (1 + rateFactor);
+        taxAmount = amountVal - netAmount; // (positive tax)
+      }
     }
 
     result.push({
@@ -450,7 +455,8 @@ function ingestTransactions() {
       category: category,
       isExcluded: isExcluded,
       taxAmount: taxAmount,
-      netAmount: netAmount
+      netAmount: netAmount,
+      isZeroRated: isZeroRated
     });
   });
 
@@ -529,8 +535,19 @@ function compileFinancialReport() {
     opexCategories.forEach(o => dataMap[k].opexBreakdown[o] = 0);
   });
 
+  // Initialize data structures for Balance Sheet VAT tracking
+  let totalOutputVAT = 0;
+  let totalInputVAT = 0;
+
   // Populate dataMap
   activeTx.forEach(tx => {
+    // Track Balance Sheet VAT (pass-through tax, not a P&L expense)
+    if (tx.amount > 0) {
+      totalOutputVAT += Math.abs(tx.taxAmount);
+    } else if (tx.amount < 0) {
+      totalInputVAT += Math.abs(tx.taxAmount);
+    }
+
     if (!tx.date) return;
     const parts = tx.date.split('-');
     if (parts.length < 2) return;
@@ -549,13 +566,12 @@ function compileFinancialReport() {
 
     const cat = tx.category;
     const net = tx.netAmount;
-    const tax = tx.taxAmount;
 
-    // Accumulate tax
-    dataMap[key].taxSum += Math.abs(tax);
+    // VAT is a Balance Sheet tracker, so we do not add it to P&L taxSum
+    // dataMap[key].taxSum remains 0 for VAT
 
     if (revenueCategories.includes(cat) || cat === "Revenue" || cat === "Turnover") {
-      dataMap[key].revenueSum += net; // net of tax (revenue typically won't have tax deducted anyway)
+      dataMap[key].revenueSum += net;
     } else if (cogsCategories.includes(cat)) {
       // COGS is positive in the P&L report
       dataMap[key].cogsSum += Math.abs(net);
@@ -571,11 +587,16 @@ function compileFinancialReport() {
     }
   });
 
+  const netVATPayable = totalOutputVAT - totalInputVAT;
+
   return {
     keys: sortedKeys,
     data: dataMap,
     cogsCategories,
-    opexCategories
+    opexCategories,
+    totalOutputVAT,
+    totalInputVAT,
+    netVATPayable
   };
 }
 
@@ -660,7 +681,7 @@ function saveOnboardingProfile() {
   const vatRateInput = document.getElementById("profile-vat-rate");
   state.onboarding.vatRate = parseFloat(vatRateInput.value) || 0;
   
-  state.onboarding.vatExtract = document.getElementById("profile-vat-extract").checked;
+  state.onboarding.vatRegistered = document.getElementById("profile-vat-registered").value;
 
   // Localize UI labels
   localizeTerminologies();
@@ -829,6 +850,27 @@ function renderReviewTable() {
       tdDesc.appendChild(matchBadge);
     }
 
+    // Zero-Rated / Exempt (for Income only)
+    const tdZeroRated = document.createElement("td");
+    tdZeroRated.className = "text-center";
+    if (amountVal > 0) {
+      const labelZr = document.createElement("label");
+      labelZr.className = "checkbox-container";
+      labelZr.style.margin = "0 auto";
+      const chkZr = document.createElement("input");
+      chkZr.type = "checkbox";
+      chkZr.checked = tx.isZeroRated;
+      chkZr.onchange = () => toggleTransactionZeroRated(tx.id, chkZr.checked);
+      const spanZr = document.createElement("span");
+      spanZr.className = "checkbox-custom";
+      labelZr.appendChild(chkZr);
+      labelZr.appendChild(spanZr);
+      tdZeroRated.appendChild(labelZr);
+    } else {
+      tdZeroRated.textContent = "—";
+      tdZeroRated.className = "text-center text-muted";
+    }
+
     // Original Amount
     const tdAmt = document.createElement("td");
     tdAmt.className = "text-right mono-cell";
@@ -889,6 +931,7 @@ function renderReviewTable() {
     tr.appendChild(tdExclude);
     tr.appendChild(tdDate);
     tr.appendChild(tdDesc);
+    tr.appendChild(tdZeroRated);
     tr.appendChild(tdAmt);
     tr.appendChild(tdTax);
     tr.appendChild(tdNet);
@@ -902,10 +945,48 @@ function toggleTransactionExcluded(txId, isChecked) {
   const tx = state.transactions.find(t => t.id === txId);
   if (tx) {
     tx.isExcluded = isChecked;
+    
+    // Recalculate tax
+    const vatRegistered = state.onboarding.vatRegistered === "yes";
+    const vatRate = state.onboarding.vatRate;
+    
+    if (vatRegistered && !isChecked) {
+      if (tx.amount < 0) {
+        const rateFactor = vatRate / 100;
+        tx.netAmount = tx.amount / (1 + rateFactor);
+        tx.taxAmount = tx.amount - tx.netAmount;
+      } else {
+        if (tx.isZeroRated) {
+          tx.netAmount = tx.amount;
+          tx.taxAmount = 0;
+        } else {
+          const rateFactor = vatRate / 100;
+          tx.netAmount = tx.amount / (1 + rateFactor);
+          tx.taxAmount = tx.amount - tx.netAmount;
+        }
+      }
+    } else {
+      tx.netAmount = tx.amount;
+      tx.taxAmount = 0;
+    }
+
     const row = document.getElementById(`tx-row-${txId}`);
     if (row) {
       if (isChecked) row.classList.add("excluded-row");
       else row.classList.remove("excluded-row");
+
+      const cells = row.children;
+      if (cells.length >= 7) {
+        const region = state.onboarding.region;
+        const tdTax = cells[5];
+        const tdNet = cells[6];
+        
+        tdTax.textContent = tx.taxAmount !== 0 ? formatCurrency(tx.taxAmount, region) : "—";
+        
+        tdNet.textContent = formatCurrency(tx.netAmount, region);
+        if (tx.netAmount < 0) tdNet.style.color = "var(--error-background-default)";
+        else tdNet.style.color = "var(--success-background-default)";
+      }
     }
   }
 }
@@ -919,12 +1000,91 @@ function updateTransactionCategory(txId, newCategory) {
     const isTransfer = newCategory === "Internal Transfer";
     tx.isExcluded = isTransfer;
     
+    // Recalculate tax
+    const vatRegistered = state.onboarding.vatRegistered === "yes";
+    const vatRate = state.onboarding.vatRate;
+    
+    if (vatRegistered && !isTransfer) {
+      if (tx.amount < 0) {
+        const rateFactor = vatRate / 100;
+        tx.netAmount = tx.amount / (1 + rateFactor);
+        tx.taxAmount = tx.amount - tx.netAmount;
+      } else {
+        if (tx.isZeroRated) {
+          tx.netAmount = tx.amount;
+          tx.taxAmount = 0;
+        } else {
+          const rateFactor = vatRate / 100;
+          tx.netAmount = tx.amount / (1 + rateFactor);
+          tx.taxAmount = tx.amount - tx.netAmount;
+        }
+      }
+    } else {
+      tx.netAmount = tx.amount;
+      tx.taxAmount = 0;
+    }
+
     const row = document.getElementById(`tx-row-${txId}`);
     if (row) {
       const chk = row.querySelector("input[type='checkbox']");
       if (chk) chk.checked = isTransfer;
       if (isTransfer) row.classList.add("excluded-row");
       else row.classList.remove("excluded-row");
+
+      const cells = row.children;
+      if (cells.length >= 7) {
+        const region = state.onboarding.region;
+        const tdTax = cells[5];
+        const tdNet = cells[6];
+        
+        tdTax.textContent = tx.taxAmount !== 0 ? formatCurrency(tx.taxAmount, region) : "—";
+        
+        tdNet.textContent = formatCurrency(tx.netAmount, region);
+        if (tx.netAmount < 0) tdNet.style.color = "var(--error-background-default)";
+        else tdNet.style.color = "var(--success-background-default)";
+      }
+    }
+  }
+}
+
+function toggleTransactionZeroRated(txId, isChecked) {
+  const tx = state.transactions.find(t => t.id === txId);
+  if (tx) {
+    tx.isZeroRated = isChecked;
+    
+    // Recalculate tax
+    const vatRegistered = state.onboarding.vatRegistered === "yes";
+    const vatRate = state.onboarding.vatRate;
+    
+    if (vatRegistered && !tx.isExcluded) {
+      if (isChecked) {
+        tx.netAmount = tx.amount;
+        tx.taxAmount = 0;
+      } else {
+        const rateFactor = vatRate / 100;
+        tx.netAmount = tx.amount / (1 + rateFactor);
+        tx.taxAmount = tx.amount - tx.netAmount;
+      }
+    } else {
+      tx.netAmount = tx.amount;
+      tx.taxAmount = 0;
+    }
+    
+    // Update DOM
+    const row = document.getElementById(`tx-row-${txId}`);
+    if (row) {
+      const cells = row.children;
+      if (cells.length >= 7) {
+        const region = state.onboarding.region;
+        const tdTax = cells[5];
+        const tdNet = cells[6];
+        
+        tdTax.textContent = tx.taxAmount !== 0 ? formatCurrency(tx.taxAmount, region) : "—";
+        
+        tdNet.textContent = formatCurrency(tx.netAmount, region);
+        if (tx.netAmount < 0) tdNet.style.color = "var(--error-background-default)";
+        else tdNet.style.color = "var(--success-background-default)";
+      }
     }
   }
 }
@@ -943,7 +1103,49 @@ function generatePLStatement() {
   // Render ChartJS
   renderPLCharts(report);
 
+  // Render VAT Summary Balance Sheet Card
+  renderVATSummaryCard(report);
+
   showStep("step-report");
+}
+
+function renderVATSummaryCard(report) {
+  const vatCard = document.getElementById("vat-summary-card");
+  const vatRegistered = state.onboarding.vatRegistered === "yes";
+
+  if (!vatRegistered) {
+    if (vatCard) vatCard.classList.add("d-none");
+    return;
+  }
+
+  if (vatCard) vatCard.classList.remove("d-none");
+
+  const region = state.onboarding.region;
+  const outVal = report.totalOutputVAT;
+  const inVal = report.totalInputVAT;
+  const netVal = report.netVATPayable;
+
+  const outEl = document.getElementById("vat-output");
+  const inEl = document.getElementById("vat-input");
+  const netEl = document.getElementById("vat-net");
+  const statusEl = document.getElementById("vat-net-status");
+
+  if (outEl) outEl.textContent = formatCurrency(outVal, region);
+  if (inEl) inEl.textContent = formatCurrency(inVal, region);
+  if (netEl) netEl.textContent = formatCurrency(netVal, region);
+
+  if (statusEl) {
+    statusEl.innerHTML = "";
+    if (netVal >= 0) {
+      statusEl.className = "metric-card-status status-negative";
+      statusEl.style.color = "var(--warning-background-default)";
+      statusEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Net VAT Liability Payable`;
+    } else {
+      statusEl.className = "metric-card-status status-positive";
+      statusEl.style.color = "var(--success-background-default)";
+      statusEl.innerHTML = `<i class="fa-solid fa-circle-check"></i> Net VAT Refund Claim Due`;
+    }
+  }
 }
 
 function renderPLMetricCards(report) {
@@ -1277,9 +1479,9 @@ function renderPLCharts(report) {
 // ==========================================
 
 function handleOnboardingVatToggle() {
-  const checkEl = document.getElementById("profile-vat-extract");
+  const checkEl = document.getElementById("profile-vat-registered");
   const rateBox = document.getElementById("profile-vat-rate-box");
-  if (checkEl.checked) {
+  if (checkEl && checkEl.value === "yes") {
     rateBox.classList.remove("d-none");
   } else {
     rateBox.classList.add("d-none");
@@ -1290,20 +1492,22 @@ function handleRegionSelectionChange() {
   const region = document.getElementById("profile-region").value;
   const vatContainer = document.getElementById("profile-vat-container");
   const vatRateInput = document.getElementById("profile-vat-rate");
-  const checkboxVat = document.getElementById("profile-vat-extract");
+  const selectVat = document.getElementById("profile-vat-registered");
 
   if (region === "United States") {
     // US has no standard national VAT/GST
-    vatContainer.classList.add("d-none");
-    checkboxVat.checked = false;
+    if (vatContainer) vatContainer.classList.add("d-none");
+    if (selectVat) selectVat.value = "no";
     handleOnboardingVatToggle();
   } else {
-    vatContainer.classList.remove("d-none");
+    if (vatContainer) vatContainer.classList.remove("d-none");
+    if (selectVat) selectVat.value = "yes";
     if (region === "United Kingdom") {
-      vatRateInput.value = 20;
+      if (vatRateInput) vatRateInput.value = 20;
     } else if (region === "Australia" || region === "South Africa") {
-      vatRateInput.value = 15;
+      if (vatRateInput) vatRateInput.value = 15;
     }
+    handleOnboardingVatToggle();
   }
 }
 
@@ -1454,7 +1658,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btn-generate-pl").addEventListener("click", generatePLStatement);
 
   document.getElementById("profile-region").addEventListener("change", handleRegionSelectionChange);
-  document.getElementById("profile-vat-extract").addEventListener("change", handleOnboardingVatToggle);
+  document.getElementById("profile-vat-registered").addEventListener("change", handleOnboardingVatToggle);
 
   document.getElementById("agg-monthly").addEventListener("click", () => setTimeAggregation("monthly"));
   document.getElementById("agg-quarterly").addEventListener("click", () => setTimeAggregation("quarterly"));

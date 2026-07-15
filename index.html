@@ -75,13 +75,13 @@
           </div>
 
           <div class="form-group" id="profile-vat-container">
-            <label class="checkbox-container">
-              <input type="checkbox" id="profile-vat-extract">
-              <span class="checkbox-custom"></span>
-              Extract local VAT/GST rate automatically from expenses
-            </label>
+            <label class="form-label" for="profile-vat-registered">VAT / GST Registered?</label>
+            <select id="profile-vat-registered">
+              <option value="no">No</option>
+              <option value="yes" selected>Yes</option>
+            </select>
             
-            <div id="profile-vat-rate-box" class="d-none mt-4" style="padding-left: var(--space-4); border-left: 2px solid var(--primary-border-default);">
+            <div id="profile-vat-rate-box" class="mt-4" style="padding-left: var(--space-4); border-left: 2px solid var(--primary-border-default);">
               <div class="form-group" style="max-width: 140px;">
                 <label class="form-label" for="profile-vat-rate">Tax Rate (%)</label>
                 <div style="position: relative; display: flex; align-items: center;">
@@ -202,6 +202,7 @@
                   <th style="width: 60px; text-align: center;">Exclude</th>
                   <th style="width: 120px;">Date</th>
                   <th>Description</th>
+                  <th style="text-align: center; width: 120px;">Zero-Rated</th>
                   <th style="text-align: right; width: 140px;">Raw Cost</th>
                   <th style="text-align: right; width: 120px;">Extracted Tax</th>
                   <th style="text-align: right; width: 140px;">Net Cost</th>
@@ -317,6 +318,29 @@
             </div>
           </div>
 
+        </div>
+
+        <!-- VAT Summary Tracker -->
+        <div class="card mt-4" id="vat-summary-card" style="max-width: 100%;">
+          <div class="card-header" style="padding-bottom: var(--space-2); border-bottom: 1px solid var(--neutral-border-default);">
+            <h3 class="type-h4"><i class="fa-solid fa-scale-balanced" style="color: var(--primary-background-default);"></i> VAT/GST Balance Sheet Tracker</h3>
+            <p class="type-body-sm text-muted">Balance Sheet tracking figures for external tax authority reporting (not counted as P&L overheads).</p>
+          </div>
+          <div class="form-row" style="margin-top: var(--space-2);">
+            <div class="metric-card" style="box-shadow: none; border: 1px solid var(--neutral-border-default);">
+              <span class="metric-card-title">Total Output VAT Collected (Sales)</span>
+              <span class="metric-card-value" id="vat-output">R0.00</span>
+            </div>
+            <div class="metric-card" style="box-shadow: none; border: 1px solid var(--neutral-border-default);">
+              <span class="metric-card-title">Total Input VAT Paid (Expenses)</span>
+              <span class="metric-card-value" id="vat-input">R0.00</span>
+            </div>
+            <div class="metric-card" style="box-shadow: none; border: 1px solid var(--neutral-border-default);">
+              <span class="metric-card-title">Net VAT Payable / (Refundable)</span>
+              <span class="metric-card-value" id="vat-net">R0.00</span>
+              <div class="metric-card-status" id="vat-net-status"></div>
+            </div>
+          </div>
         </div>
 
       </section>
